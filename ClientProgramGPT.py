@@ -1,150 +1,101 @@
 # ClientProgram.py
-
-import os
 import socket
-import hashlib  # For hashing passwords
-from cryptography.fernet import Fernet
+import os
 
-IP = "localhost"
+HOST = 'localhost'
 PORT = 4450
-ADDR = (IP, PORT)
 SIZE = 1024
-FORMAT = "utf-8"
-SERVER_PATH = "server_data"
-
-# Generate a key for symmetric encryption (this should be securely shared with the server)
-key = Fernet.generate_key()
-cipher = Fernet(key)
-
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-
-def connect(client):
-    client.connect(ADDR)
-    print("Connected to the server.")
-
-
-def authenticate(client):
-    username = input("Enter username: ")
-    password = input("Enter password: ")
-    encrypted_password = cipher.encrypt(password.encode(FORMAT))  # Encrypt password
-
-    auth_message = f"AUTH@{username},{encrypted_password.decode(FORMAT)}"
-    client.send(auth_message.encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    cmd, msg = response.split("@")
-    if cmd == "OK":
-        print("Authentication successful.")
-    else:
-        print("Authentication failed:", msg)
-        client.close()
-        exit()
-
-
-def upload(client, file_path):
-    if not os.path.isfile(file_path):
-        print("File does not exist.")
-        return
-
-    file_name = os.path.basename(file_path)
-    client.send(f"UPLOAD@{file_name}".encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    if response == "EXISTS":
-        overwrite = input("File already exists on server. Overwrite? (yes/no): ").strip().lower()
-        if overwrite != "yes":
-            return
-        client.send("OVERWRITE".encode(FORMAT))
-    else:
-        client.send("PROCEED".encode(FORMAT))
-
-    with open(file_path, "rb") as file:
-        while chunk := file.read(SIZE):
-            client.send(chunk)
-    client.send(b"")  # Signal end of file transfer
-    print("File uploaded successfully.")
-
-
-def download(client, file_name):
-    client.send(f"DOWNLOAD@{file_name}".encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    if response == "NOTFOUND":
-        print("File not found on the server.")
-        return
-
-    with open(file_name, "wb") as file:
-        while True:
-            data = client.recv(SIZE)
-            if not data:
-                break
-            file.write(data)
-    print("File downloaded successfully.")
-
-
-def delete(client, file_name):
-    client.send(f"DELETE@{file_name}".encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    print(response)
-
-
-def list_files(client):
-    client.send("DIR".encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    print("Files on server:\n", response)
-
-
-def manage_subfolder(client, operation, folder_path):
-    client.send(f"SUBFOLDER@{operation} {folder_path}".encode(FORMAT))
-    response = client.recv(SIZE).decode(FORMAT)
-    print(response)
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "LOGOUT"
 
 
 def main():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    client_socket.connect((HOST, PORT))
 
-    # Connect and authenticate
-    connect(client)
-    authenticate(client)
+    print(client_socket.recv(SIZE).decode(FORMAT))  # Welcome message
 
-    # Main command loop
+    # Authentication process
+    authenticated = False
+    while not authenticated:
+        username = input("Enter username: ")
+        password = input("Enter password: ")
+        client_socket.send(username.encode(FORMAT))
+        client_socket.send(password.encode(FORMAT))
+
+        response = client_socket.recv(SIZE).decode(FORMAT)
+        if response.startswith("AUTH_OK"):
+            print(response.split('@')[1])
+            authenticated = True
+        else:
+            print(response.split('@')[1])
+
+    # Command loop
     while True:
-        data = input("> ").strip()
-        if not data:
-            continue
-
-        command_parts = data.split(" ")
-        cmd = command_parts[0].upper()
-
-        if cmd == "UPLOAD" and len(command_parts) == 2:
-            upload(client, command_parts[1])
-
-        elif cmd == "DOWNLOAD" and len(command_parts) == 2:
-            download(client, command_parts[1])
-
-        elif cmd == "DELETE" and len(command_parts) == 2:
-            delete(client, command_parts[1])
-
-        elif cmd == "DIR":
-            list_files(client)
-
-        elif cmd == "SUBFOLDER" and len(command_parts) == 3:
-            operation, folder_path = command_parts[1], command_parts[2]
-            if operation in {"create", "delete"}:
-                manage_subfolder(client, operation, folder_path)
-            else:
-                print("Invalid subfolder operation. Use 'create' or 'delete'.")
-
-        elif cmd == "LOGOUT":
-            client.send("LOGOUT".encode(FORMAT))
-            print("Logged out successfully.")
+        command = input("Enter command (DIR, UPLOAD, DOWNLOAD, DELETE, LOGOUT): ")
+        if command == "LOGOUT":
+            client_socket.send(DISCONNECT_MESSAGE.encode(FORMAT))
             break
 
-        else:
-            print("Invalid command. Available commands: UPLOAD, DOWNLOAD, DELETE, DIR, SUBFOLDER, LOGOUT.")
+        elif command == "UPLOAD":
+            filepath = input("Enter filepath to upload: ").strip()
 
-    print("Disconnected from the server.")
-    client.close()
+            if not filepath:
+                print("Filepath cannot be empty.")
+                continue
+
+            filename = os.path.basename(filepath)
+
+            if not os.path.isfile(filepath):
+                print(f"File not found: {filepath}")
+                continue
+
+            # Send the command and file name to the server
+            client_socket.send(f"UPLOAD {filename}".encode(FORMAT))
+
+            # Open file and send in chunks
+            try:
+                with open(filepath, 'rb') as f:
+                    file_data = f.read(SIZE)
+                    while file_data:
+                        client_socket.send(file_data)
+                        file_data = f.read(SIZE)
+                # Notify server that file transfer is complete
+                client_socket.send("END".encode(FORMAT))
+
+                response = client_socket.recv(SIZE).decode(FORMAT)
+                print(response)
+
+            except Exception as e:
+                print(f"An error occurred during upload: {e}")
+
+        elif command.startswith("DOWNLOAD"):
+            filename = input("Enter filename to download: ").strip()
+
+            client_socket.send(f"DOWNLOAD {filename}".encode(FORMAT))
+
+            with open(filename, 'wb') as f:
+                while True:
+                    file_data = client_socket.recv(SIZE)
+                    if file_data == b"END":
+                        break
+                    f.write(file_data)
+            print("File downloaded successfully.")
+
+        elif command.startswith("DELETE"):
+            filename = input("Enter filename to delete: ").strip()
+
+            client_socket.send(f"DELETE {filename}".encode(FORMAT))
+            print(client_socket.recv(SIZE).decode(FORMAT))
+
+        elif command == "DIR":
+            client_socket.send(command.encode(FORMAT))
+            print(client_socket.recv(SIZE).decode(FORMAT))
+
+        else:
+            print("Invalid command.")
+
+    client_socket.close()
 
 
 if __name__ == "__main__":
