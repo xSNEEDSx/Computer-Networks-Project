@@ -1,89 +1,105 @@
-import os
+# ServerProgram.py
 import socket
 import threading
-import hashlib
+import os
 
-IP = "localhost"
+HOST = 'localhost'
 PORT = 4450
-ADDR = (IP, PORT)
 SIZE = 1024
-FORMAT = "utf-8"
-SERVER_PATH = "server_data"
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "LOGOUT"
+AUTH_CREDENTIALS = {"Logan": "Baller",
+                    "Billy": "Balling",
+                    "Robert": "Balla"}  # Example credentials
 
-USER_CREDENTIALS = {
-    "Logan": hashlib.sha256("Baller".encode(FORMAT)).hexdigest(),
-    "Robert": hashlib.sha256("Balls".encode(FORMAT)).hexdigest(),
-    "Billy": hashlib.sha256("Balling".encode(FORMAT)).hexdigest()
-    # Add more users here
-}
+# Directory for file operations
+BASE_DIR = 'server_data'
+if not os.path.exists(BASE_DIR):
+    os.makedirs(BASE_DIR)
 
 
 def handle_client(conn, addr):
-    """Handle communication with a single client."""
     print(f"[NEW CONNECTION] {addr} connected.")
-    conn.send("OK@Welcome to the server".encode("utf-8"))
+    conn.send("OK@Welcome to the server".encode(FORMAT))
 
+    authenticated = False
     try:
+        while not authenticated:
+            username = conn.recv(SIZE).decode(FORMAT)
+            password = conn.recv(SIZE).decode(FORMAT)
+            if AUTH_CREDENTIALS.get(username) == password:
+                conn.send("AUTH_OK@Welcome!".encode(FORMAT))
+                authenticated = True
+            else:
+                conn.send("AUTH_FAIL@Invalid credentials, try again.".encode(FORMAT))
+
         while True:
-            data = conn.recv(SIZE)  # Receive data from client
-            if not data:  # If no data is received, the client may have disconnected
+            command = conn.recv(SIZE).decode(FORMAT)
+            if command == DISCONNECT_MESSAGE:
                 print(f"Connection closed by {addr}")
                 break
+            elif command == "DIR":
+                try:
+                    files = os.listdir(BASE_DIR)
+                    response = "DIR_OK@" + ", ".join(files)
+                except Exception as e:
+                    response = f"ERROR@{str(e)}"
+                conn.send(response.encode(FORMAT))
 
-            data = data.decode(FORMAT)  # Decode the received bytes to string
-            print(f"Data received: {data}")
+            elif command.startswith("UPLOAD"):
+                _, filename = command.split()
+                filepath = os.path.join(BASE_DIR, filename)
+                with open(filepath, 'wb') as f:
+                    while True:
+                        file_data = conn.recv(SIZE)
+                        if file_data == b"END":
+                            break
+                        f.write(file_data)
+                conn.send("UPLOAD_OK@File uploaded successfully.".encode(FORMAT))
 
-            cmd_data = data.split("@")
-            cmd = cmd_data[0]
-
-            # Handle authentication (check hashed password)
-            if cmd == "AUTH":
-                if len(cmd_data) < 3:
-                    conn.send("AUTH_FAILED@Missing arguments".encode("utf-8"))
-                    continue
-
-                username, password_hash = cmd_data[1], cmd_data[2]
-                print(f"Received password hash: {password_hash}")  # Debugging
-                if USER_CREDENTIALS.get(username) == password_hash:
-                    print("Authentication successful.")
-                    conn.send("AUTH_OK".encode("utf-8"))
+            elif command.startswith("DOWNLOAD"):
+                _, filename = command.split()
+                filepath = os.path.join(BASE_DIR, filename)
+                if os.path.exists(filepath):
+                    conn.send("DOWNLOAD_OK@Starting file download.".encode(FORMAT))
+                    with open(filepath, 'rb') as f:
+                        file_data = f.read(SIZE)
+                        while file_data:
+                            conn.send(file_data)
+                            file_data = f.read(SIZE)
+                    conn.send("END".encode(FORMAT))
                 else:
-                    print("Authentication failed.")
-                    conn.send("AUTH_FAILED".encode("utf-8"))
+                    conn.send("ERROR@File not found.".encode(FORMAT))
 
-            elif cmd == "LOGOUT":
-                print(f"{addr} logged out.")
-                break
+            elif command.startswith("DELETE"):
+                _, filename = command.split()
+                filepath = os.path.join(BASE_DIR, filename)
+                if os.path.exists(filepath):
+                    os.remove(filepath)
+                    conn.send("DELETE_OK@File deleted successfully.".encode(FORMAT))
+                else:
+                    conn.send("ERROR@File not found.".encode(FORMAT))
 
-            # Add other command logic here (e.g., file upload/download)
-
+            else:
+                conn.send("ERROR@Unknown command.".encode(FORMAT))
     except Exception as e:
         print(f"Error while handling client {addr}: {e}")
-        conn.send(f"ERROR@{e}".encode("utf-8"))  # Send error to the client
-
     finally:
-        print(f"{addr} disconnected")
         conn.close()
+        print(f"{addr} disconnected")
 
 
 def start_server():
-    """Start the server."""
-    host = 'localhost'
-    port = 4450
-
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind((host, port))
-    server_socket.listen(5)
-    print(f"Server listening on {host}:{port}")
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind((HOST, PORT))
+    server.listen()
+    print(f"Server listening on {HOST}:{PORT}")
 
     while True:
-        try:
-            conn, addr = server_socket.accept()
-            print(f"[NEW CONNECTION] {addr} connected.")
-            handle_client(conn, addr)
-        except Exception as e:
-            print(f"Error accepting client connection: {e}")
+        conn, addr = server.accept()
+        thread = threading.Thread(target=handle_client, args=(conn, addr))
+        thread.start()
+        print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
 
 
-if __name__ == "__main__":
-    start_server()
+start_server()
