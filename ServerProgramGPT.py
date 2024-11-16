@@ -1,4 +1,5 @@
 # ServerProgram.py
+
 import socket
 import threading
 import os
@@ -34,7 +35,12 @@ def handle_client(conn, addr):
                 conn.send("AUTH_FAIL@Invalid credentials, try again.".encode(FORMAT))
 
         while True:
-            command = conn.recv(SIZE).decode(FORMAT)
+            try:
+                command = conn.recv(SIZE).decode(FORMAT)
+            except UnicodeDecodeError:  # Handle invalid data decoding
+                conn.send("ERROR@Invalid input received.".encode(FORMAT))
+                return
+
             if command == DISCONNECT_MESSAGE:
                 print(f"Connection closed by {addr}")
                 break
@@ -47,29 +53,44 @@ def handle_client(conn, addr):
                 conn.send(response.encode(FORMAT))
 
             elif command.startswith("UPLOAD"):
-                _, filename = command.split()
-                filepath = os.path.join(BASE_DIR, filename)
-                with open(filepath, 'wb') as f:
-                    while True:
-                        file_data = conn.recv(SIZE)
-                        if file_data == b"END":
-                            break
-                        f.write(file_data)
-                conn.send("UPLOAD_OK@File uploaded successfully.".encode(FORMAT))
+                if not command.startswith("UPLOAD "):
+                    conn.send("ERROR@Invalid UPLOAD command.".encode(FORMAT))
+                    return
+
+                parts = command.split(maxsplit=1)
+                if len(parts) != 2:
+                    conn.send("ERROR@Invalid UPLOAD command format.".encode(FORMAT))
+                    return
+
+                elif command.startswith("UPLOAD"):
+                    filename = parts[1].strip()
+                    filepath = os.path.join(BASE_DIR, filename)
+                    try:
+                        with open(filepath, 'wb') as f:  # Write in binary mode
+                            while True:
+                                file_data = conn.recv(SIZE)
+                                if file_data.endswith(b"END"):  # Check if the data ends with 'END'
+                                    f.write(file_data[:-len(b"END")])  # Write everything except 'END'
+                                    break
+                                f.write(file_data)  # Write the data chunk
+                        conn.send("UPLOAD_OK@File uploaded successfully.".encode(FORMAT))
+                    except Exception as e:
+                        conn.send(f"ERROR@{str(e)}".encode(FORMAT))
 
             elif command.startswith("DOWNLOAD"):
-                _, filename = command.split()
+                filename = parts[1].strip()
                 filepath = os.path.join(BASE_DIR, filename)
-                if os.path.exists(filepath):
-                    conn.send("DOWNLOAD_OK@Starting file download.".encode(FORMAT))
-                    with open(filepath, 'rb') as f:
-                        file_data = f.read(SIZE)
-                        while file_data:
-                            conn.send(file_data)
+                try:
+                    with open(filepath, 'rb') as f:  # Read in binary mode
+                        while True:
                             file_data = f.read(SIZE)
-                    conn.send("END".encode(FORMAT))
-                else:
-                    conn.send("ERROR@File not found.".encode(FORMAT))
+                            if not file_data:
+                                break
+                            conn.send(file_data)
+                        conn.send(b"END")  # Signal the end of the file
+                    print(f"Sent {filename} to client.")
+                except Exception as e:
+                    conn.send(f"ERROR@{str(e)}".encode(FORMAT))
 
             elif command.startswith("DELETE"):
                 _, filename = command.split()
