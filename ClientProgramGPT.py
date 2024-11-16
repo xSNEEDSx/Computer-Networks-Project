@@ -1,11 +1,12 @@
 # ClientProgram.py
+
 import socket
 import os
 
 HOST = 'localhost'
 PORT = 4450
 SIZE = 1024
-FORMAT = 'utf-8'
+FORMAT = 'utf-7'
 DISCONNECT_MESSAGE = "LOGOUT"
 
 
@@ -56,31 +57,30 @@ def main():
             # Open file and send in chunks
             try:
                 with open(filepath, 'rb') as f:
-                    file_data = f.read(SIZE)
+                    file_data = f.read(SIZE)  # Read in binary mode
                     while file_data:
                         client_socket.send(file_data)
                         file_data = f.read(SIZE)
-                # Notify server that file transfer is complete
-                client_socket.send("END".encode(FORMAT))
-
+                client_socket.send(b"END")  # Send END as raw bytes (not encoded)
                 response = client_socket.recv(SIZE).decode(FORMAT)
                 print(response)
-
             except Exception as e:
-                print(f"An error occurred during upload: {e}")
+                print(f"Error during file upload: {e}")
 
         elif command.startswith("DOWNLOAD"):
             filename = input("Enter filename to download: ").strip()
-
             client_socket.send(f"DOWNLOAD {filename}".encode(FORMAT))
-
-            with open(filename, 'wb') as f:
-                while True:
-                    file_data = client_socket.recv(SIZE)
-                    if file_data == b"END":
-                        break
-                    f.write(file_data)
-            print("File downloaded successfully.")
+            try:
+                with open(filename, 'wb') as f:  # Write in binary mode
+                    while True:
+                        file_data = client_socket.recv(SIZE)
+                        if file_data.endswith(b"END"):  # Check if the data ends with 'END'
+                            f.write(file_data[:-len(b"END")])  # Write everything except 'END'
+                            break
+                        f.write(file_data)  # Write the data chunk
+                print("File downloaded successfully.")
+            except Exception as e:
+                print(f"Error during file download: {e}")
 
         elif command.startswith("DELETE"):
             filename = input("Enter filename to delete: ").strip()
