@@ -1,3 +1,5 @@
+# ServerProgram.py
+
 import socket
 import threading
 import os
@@ -47,10 +49,16 @@ def handle_client(conn, addr):
                 print(f"Connection closed by {addr}")
                 break
 
-            elif command == "DIR":
+            # Measure server response time
+            response_start_time = time.time()
+
+            if command == "DIR":
                 files = os.listdir(current_dir)
                 response = "DIR_OK@" + ", ".join(files)
                 conn.send(response.encode(FORMAT))
+                response_end_time = time.time()
+                response_time = response_end_time - response_start_time
+                log_operation("SERVER_RESPONSE_TIME", f"Response time for DIR: {response_time:.2f} seconds")
                 log_operation("DIR", f"Listed files for {addr}.")
 
             elif command.startswith("UPLOAD"):
@@ -113,7 +121,6 @@ def handle_client(conn, addr):
                 filename = parts[1].strip()
                 filepath = os.path.join(BASE_DIR, filename)
                 if not os.path.exists(filepath):
-                    conn.send(f"ERROR@File '{filename}' not found.".encode(FORMAT))
                     log_operation(f"Failed download: {filename} not found", addr)
                     continue
 
@@ -147,7 +154,16 @@ def handle_client(conn, addr):
                     log_operation(f"Error during download of '{filename}': {str(e)}", addr)  # Log the error
 
             elif command.startswith("DELETE"):
-                filename = command.split(maxsplit=1)[1].strip()
+                # Use the delimiter '@@' to split the command and filename
+                parts = command.split("@@", maxsplit=1)
+
+                # Check if no filename was provided
+                if len(parts) < 2 or not parts[1].strip():
+                    conn.send("ERROR@No file inputted for deletion.".encode(FORMAT))
+                    log_operation("DELETE_FAIL", "No file inputted for deletion.")
+                    continue
+
+                filename = parts[1].strip()
                 filepath = os.path.join(BASE_DIR, filename)
                 if os.path.exists(filepath):
                     os.remove(filepath)
