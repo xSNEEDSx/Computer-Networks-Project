@@ -1,25 +1,21 @@
-# ServerProgram.py
-
 import socket
 import threading
 import os
 import hashlib
-from AnalysisProgram import log_operation
+import time
+from AnalysisProgram import log_operation  # Importing the log function
 
 HOST = 'localhost'
 PORT = 4450
 SIZE = 1024
 FORMAT = 'utf-8'
 DISCONNECT_MESSAGE = "LOGOUT"
-AUTH_CREDENTIALS = {"Logan": "Baller",
-                    "Billy": "Balling",
-                    "Robert": "Balla"}
+AUTH_CREDENTIALS = {"Logan": "Baller", "Billy": "Balling", "Robert": "Balla"}
 
 # Directory for file operations
 BASE_DIR = 'server_data'
 if not os.path.exists(BASE_DIR):
     os.makedirs(BASE_DIR)
-
 
 def handle_client(conn, addr):
     log_operation("CONNECT", f"Client connected from {addr}")
@@ -77,7 +73,10 @@ def handle_client(conn, addr):
 
                 else:
                     conn.send("READY@Proceed with upload.".encode(FORMAT))
-                # Receive the file data
+
+                # Record start time for upload
+                upload_start_time = time.time()
+
                 try:
                     with open(filepath, 'wb') as f:
                         while True:
@@ -86,8 +85,21 @@ def handle_client(conn, addr):
                                 f.write(file_data[:-len(b"END")])  # Write everything except END
                                 break
                             f.write(file_data)
+
+                    upload_end_time = time.time()
+                    upload_time = upload_end_time - upload_start_time
+
+                    # Calculate upload rate (MB/s)
+                    file_size = os.path.getsize(filepath)
+                    upload_rate = file_size / (1024 * 1024) / upload_time  # MB/s
+
                     conn.send(f"SUCCESS@File '{filename}' uploaded successfully.".encode(FORMAT))
-                    log_operation(f"File uploaded: {filename}", addr)
+                    log_operation(f"File uploaded: {filename} at {upload_rate:.2f} MB/s", addr)
+
+                    # Log the performance metrics
+                    log_operation("UPLOAD_TIME", f"Upload time: {upload_time:.2f} seconds")
+                    log_operation("UPLOAD_RATE", f"Upload rate: {upload_rate:.2f} MB/s")
+
                 except Exception as e:
                     conn.send(f"ERROR@{str(e)}".encode(FORMAT))
                     log_operation(f"Error during upload of '{filename}': {str(e)}", addr)  # Log the error
@@ -105,6 +117,9 @@ def handle_client(conn, addr):
                     log_operation(f"Failed download: {filename} not found", addr)
                     continue
 
+                # Record start time for download
+                download_start_time = time.time()
+
                 try:
                     with open(filepath, 'rb') as f:  # Read in binary mode
                         while True:
@@ -113,9 +128,23 @@ def handle_client(conn, addr):
                                 break
                             conn.send(file_data)
                         conn.send(b"END")  # Signal the end of the file
-                    log_operation(f"File downloaded: {filename}", addr)
+
+                    download_end_time = time.time()
+                    download_time = download_end_time - download_start_time
+
+                    # Calculate download rate (MB/s)
+                    file_size = os.path.getsize(filepath)
+                    download_rate = file_size / (1024 * 1024) / download_time  # MB/s
+
+                    log_operation(f"File downloaded: {filename} at {download_rate:.2f} MB/s", addr)
+
+                    # Log the performance metrics
+                    log_operation("DOWNLOAD_TIME", f"Download time: {download_time:.2f} seconds")
+                    log_operation("DOWNLOAD_RATE", f"Download rate: {download_rate:.2f} MB/s")
+
                 except Exception as e:
                     conn.send(f"ERROR@{str(e)}".encode(FORMAT))
+                    log_operation(f"Error during download of '{filename}': {str(e)}", addr)  # Log the error
 
             elif command.startswith("DELETE"):
                 filename = command.split(maxsplit=1)[1].strip()
@@ -183,26 +212,25 @@ def handle_client(conn, addr):
                     conn.send(f"ERROR@Unexpected error: {str(e)}".encode(FORMAT))
                     log_operation("CD_ERROR", f"Unexpected error occurred: {str(e)}")
 
-            else:
-                conn.send("ERROR@Unknown command.".encode(FORMAT))
-                log_operation("UNKNOWN_COMMAND", f"Unknown command received from {addr}: {command}")
+                except Exception as e:
+                    conn.send(f"ERROR@{str(e)}".encode(FORMAT))
 
     except Exception as e:
         log_operation("ERROR", f"Error handling client {addr}: {e}")
     finally:
         conn.close()
 
-
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind((HOST, PORT))
-    server.listen()
-    print(f"Server listening on {HOST}:{PORT}")
+    server.listen(5)
+    print(f"[LISTENING] Server is listening on {HOST}:{PORT}")
+
     while True:
         conn, addr = server.accept()
-        thread = threading.Thread(target=handle_client, args=(conn, addr))
-        thread.start()
-        print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
+        client_thread = threading.Thread(target=handle_client, args=(conn, addr))
+        client_thread.start()
 
 
-start_server()
+if __name__ == "__main__":
+    start_server()
