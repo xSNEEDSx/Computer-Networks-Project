@@ -1,3 +1,5 @@
+# ClientProgram.py
+
 import socket
 import os
 import hashlib
@@ -88,7 +90,9 @@ def main():
                 continue
 
         elif command.startswith("DOWNLOAD"):
-            filename = input("Enter filename to download: ").strip()
+            filename = input("Enter filename to download (or type BACK to cancel): ").strip()
+            if filename.upper() == "BACK":
+                continue
             client_socket.send(f"DOWNLOAD {filename}".encode(FORMAT))
             try:
                 if not filename:
@@ -118,9 +122,13 @@ def main():
             filename = input("Enter filename to delete (or type BACK to cancel): ").strip()
             if filename.upper() == "BACK":
                 continue
-
-            client_socket.send(f"DELETE {filename}".encode(FORMAT))
-            print(client_socket.recv(SIZE).decode(FORMAT))
+                
+            # Ensure we only send the filename, without assuming local existence
+            delete_command = f"DELETE@@{filename}"  # Use '@@' as the delimiter
+            client_socket.send(delete_command.encode(FORMAT))
+            # Receive and print the server's response
+            response = client_socket.recv(SIZE).decode(FORMAT)
+            print(response)
 
         elif command == "DIR":
             client_socket.send(command.encode(FORMAT))
