@@ -19,6 +19,7 @@ BASE_DIR = 'server_data'
 if not os.path.exists(BASE_DIR):
     os.makedirs(BASE_DIR)
 
+
 def handle_client(conn, addr):
     log_operation("CONNECT", f"Client connected from {addr}")
     print(f"[NEW CONNECTION] {addr} connected.")
@@ -120,38 +121,33 @@ def handle_client(conn, addr):
 
                 filename = parts[1].strip()
                 filepath = os.path.join(BASE_DIR, filename)
-                if not os.path.exists(filepath):
-                    log_operation(f"Failed download: {filename} not found", addr)
+                if not os.path.isfile(filepath):
+                    conn.send("ERROR@File not found.".encode(FORMAT))
+                    log_operation("DOWNLOAD_FAIL", f"File not found: '{filename}' requested by {addr}")
                     continue
 
-                # Record start time for download
-                download_start_time = time.time()
-
                 try:
-                    with open(filepath, 'rb') as f:  # Read in binary mode
+                    conn.send("SUCCESS@File found. Starting transfer.".encode(FORMAT))
+                    download_start_time = time.time()  # Start timer for performance metrics
+                    with open(filepath, 'rb') as f:
                         while True:
                             file_data = f.read(SIZE)
                             if not file_data:
                                 break
-                            conn.send(file_data)
-                        conn.send(b"END")  # Signal the end of the file
 
+                            conn.send(file_data)
+                        conn.send(b"END")  # End marker for file transfer
                     download_end_time = time.time()
                     download_time = download_end_time - download_start_time
-
-                    # Calculate download rate (MB/s)
-                    file_size = os.path.getsize(filepath)
-                    download_rate = file_size / (1024 * 1024) / download_time  # MB/s
-
-                    log_operation(f"File downloaded: {filename} at {download_rate:.2f} MB/s", addr)
-
-                    # Log the performance metrics
+                    file_size = os.path.getsize(filepath)  # Get file size
+                    download_rate = file_size / (1024 * 1024) / download_time  # Rate in MB/s
+                    # Log performance metrics
+                    log_operation("DOWNLOAD_SUCCESS", f"File '{filename}' sent to {addr}")
                     log_operation("DOWNLOAD_TIME", f"Download time: {download_time:.2f} seconds")
                     log_operation("DOWNLOAD_RATE", f"Download rate: {download_rate:.2f} MB/s")
-
                 except Exception as e:
                     conn.send(f"ERROR@{str(e)}".encode(FORMAT))
-                    log_operation(f"Error during download of '{filename}': {str(e)}", addr)  # Log the error
+                    log_operation("DOWNLOAD_ERROR", f"Error during download of '{filename}': {str(e)}")
 
             elif command.startswith("DELETE"):
                 # Use the delimiter '@@' to split the command and filename
@@ -228,13 +224,11 @@ def handle_client(conn, addr):
                     conn.send(f"ERROR@Unexpected error: {str(e)}".encode(FORMAT))
                     log_operation("CD_ERROR", f"Unexpected error occurred: {str(e)}")
 
-                except Exception as e:
-                    conn.send(f"ERROR@{str(e)}".encode(FORMAT))
-
     except Exception as e:
         log_operation("ERROR", f"Error handling client {addr}: {e}")
     finally:
         conn.close()
+
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
