@@ -1,8 +1,7 @@
-# ClientProgram.py
-
 import socket
 import os
 import hashlib
+import time
 
 HOST = 'localhost'
 PORT = 4450
@@ -75,17 +74,18 @@ def main():
 
             # Proceed with uploading the file
             try:
-                with open(filepath, 'rb') as f:
-                    while True:
-                        file_data = f.read(SIZE)
-                        if not file_data:
-                            break
-                        client_socket.send(file_data)
-                    client_socket.send(b"END")  # Signal end of file
-                response = client_socket.recv(SIZE).decode(FORMAT)
-                print(response.split('@')[1])  # Print success or error message
+                with open(filepath, 'rb') as file:
+                    data = file.read(SIZE)
+                    while data:
+                        client_socket.send(data)
+                        data = file.read(SIZE)
+                    client_socket.send(b"END")  # Send END marker
+
+                print(client_socket.recv(SIZE).decode(FORMAT))  # Success message
+
             except Exception as e:
-                print(f"Error during file upload: {e}")
+                print(f"Error uploading file: {e}")
+                continue
 
         elif command.startswith("DOWNLOAD"):
             filename = input("Enter filename to download: ").strip()
@@ -100,11 +100,16 @@ def main():
                     continue
                 with open(filename, 'wb') as f:  # Write in binary mode
                     while True:
+                        # Record start time for download
+                        download_start_time = time.time()
                         file_data = client_socket.recv(SIZE)
                         if file_data.endswith(b"END"):  # Check if the data ends with 'END'
                             f.write(file_data[:-len(b"END")])  # Write everything except 'END'
                             break
                         f.write(file_data)  # Write the data chunk
+                download_end_time = time.time()
+                download_time = download_end_time - download_start_time
+                print(f"Downloaded '{filename}' in {download_time:.2f} seconds")
                 print("File downloaded successfully.")
             except Exception as e:
                 print(f"Error during file download: {e}")
@@ -127,7 +132,6 @@ def main():
             folder_path = input("Enter folder path (or type BACK to cancel): ").strip()
             if folder_path.upper() == "BACK":
                 continue
-
             client_socket.send(f"Subfolder {action} {folder_path}".encode(FORMAT))
             print(client_socket.recv(SIZE).decode(FORMAT))
 
