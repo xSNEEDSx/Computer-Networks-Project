@@ -44,7 +44,7 @@ def main():
             break
 
         elif command == "UPLOAD":
-            filepath = input("Enter filepath to upload (or type BACK to cancel): ").strip()
+            filepath = input("Enter FULL filepath (C:|###|###|###|file) to upload (or type BACK to cancel): ").strip()
             if filepath.upper() == "BACK":
                 continue
             if not filepath:
@@ -93,28 +93,31 @@ def main():
             filename = input("Enter filename to download (or type BACK to cancel): ").strip()
             if filename.upper() == "BACK":
                 continue
+
             client_socket.send(f"DOWNLOAD {filename}".encode(FORMAT))
             try:
-                if not filename:
-                    print("Filepath cannot be empty.")
+                # Receive the server's initial response
+                response = client_socket.recv(SIZE).decode(FORMAT)
+                if response.startswith("ERROR@"):
+                    print(response.split("@", 1)[1])  # Print the error message
                     continue
-                filename = os.path.basename(filename)
-                if not os.path.isfile(filename):
-                    print(f"File not found: {filename}")
-                    continue
-                with open(filename, 'wb') as f:  # Write in binary mode
+
+                download_start_time = time.time()  # Start time for performance metrics
+                # Open file for binary writing
+                with open(filename, 'wb') as f:
+                    print(f"Downloading '{filename}'...")
                     while True:
-                        # Record start time for download
-                        download_start_time = time.time()
                         file_data = client_socket.recv(SIZE)
-                        if file_data.endswith(b"END"):  # Check if the data ends with 'END'
-                            f.write(file_data[:-len(b"END")])  # Write everything except 'END'
+                        if not file_data:
+                            raise Exception("Connection closed unexpectedly during file transfer.")
+                        if file_data.endswith(b"END"):  # Check for end marker
+                            f.write(file_data[:-len(b"END")])  # Write everything except the marker
                             break
-                        f.write(file_data)  # Write the data chunk
+
+                        f.write(file_data)
                 download_end_time = time.time()
                 download_time = download_end_time - download_start_time
                 print(f"Downloaded '{filename}' in {download_time:.2f} seconds")
-                print("File downloaded successfully.")
             except Exception as e:
                 print(f"Error during file download: {e}")
 
@@ -122,7 +125,7 @@ def main():
             filename = input("Enter filename to delete (or type BACK to cancel): ").strip()
             if filename.upper() == "BACK":
                 continue
-                
+
             # Ensure we only send the filename, without assuming local existence
             delete_command = f"DELETE@@{filename}"  # Use '@@' as the delimiter
             client_socket.send(delete_command.encode(FORMAT))
