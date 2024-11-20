@@ -69,7 +69,7 @@ def handle_client(conn, addr):
                     continue
 
                 filename = parts[1].strip()
-                filepath = os.path.join(BASE_DIR, filename)
+                filepath = os.path.join(current_dir, filename)
 
                 # Check if the file already exists
                 if os.path.exists(filepath):
@@ -120,7 +120,7 @@ def handle_client(conn, addr):
                     continue
 
                 filename = parts[1].strip()
-                filepath = os.path.join(BASE_DIR, filename)
+                filepath = os.path.join(current_dir, filename)
                 if not os.path.isfile(filepath):
                     conn.send("ERROR@File not found.".encode(FORMAT))
                     log_operation("DOWNLOAD_FAIL", f"File not found: '{filename}' requested by {addr}")
@@ -160,7 +160,7 @@ def handle_client(conn, addr):
                     continue
 
                 filename = parts[1].strip()
-                filepath = os.path.join(BASE_DIR, filename)
+                filepath = os.path.join(current_dir, filename)
                 if os.path.exists(filepath):
                     os.remove(filepath)
                     conn.send("DELETE_OK@File deleted successfully.".encode(FORMAT))
