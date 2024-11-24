@@ -5,6 +5,8 @@ import threading
 import os
 import hashlib
 import time
+import pandas
+import openpyxl
 from AnalysisProgram import log_operation  # Importing the log function
 
 HOST = 'localhost'
@@ -96,18 +98,44 @@ def handle_client(conn, addr):
                             f.write(file_data)
 
                     upload_end_time = time.time()
-                    upload_time = upload_end_time - upload_start_time
+                    upload_time = upload_end_time - upload_start_time + 0.000001 # avoid division by zero
 
                     # Calculate upload rate (MB/s)
                     file_size = os.path.getsize(filepath)
                     upload_rate = file_size / (1024 * 1024) / upload_time  # MB/s
 
                     conn.send(f"SUCCESS@File '{filename}' uploaded successfully.".encode(FORMAT))
-                    log_operation(f"File uploaded: {filename} at {upload_rate:.2f} MB/s", addr)
 
                     # Log the performance metrics
+                    log_operation(f"File uploaded: {filename} at {upload_rate:.2f} MB/s", addr)
                     log_operation("UPLOAD_TIME", f"Upload time: {upload_time:.2f} seconds")
                     log_operation("UPLOAD_RATE", f"Upload rate: {upload_rate:.2f} MB/s")
+
+                    # Append metrics to an Excel file
+                    excel_file = "upload_rates.xlsx"
+                    data = {
+                        "Timestamp": [time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(upload_end_time))],
+                        "File Name": [filename],
+                        "File Size (MB)": [file_size / (1024 * 1024)],  # Convert bytes to MB
+                        "Upload Time (s)": [upload_time],
+                        "Upload Rate (MB/s)": [upload_rate],
+                    }
+
+                    # Create a DataFrame
+                    df = pandas.DataFrame(data)
+
+                    # Append to Excel (create file if it doesn't exist)
+                    try:
+                        # If the file exists, read it and append the new data
+                        existing_data = pandas.read_excel(excel_file, engine='openpyxl')
+                        updated_data = pandas.concat([existing_data, df], ignore_index=True)
+                    except FileNotFoundError:
+                        # If the file doesn't exist, create a new one
+                        updated_data = df
+
+                    # Save to Excel
+                    updated_data.to_excel(excel_file, index=False, engine='openpyxl')
+                    print(f"Upload saved successfully to {excel_file}")
 
                 except Exception as e:
                     conn.send(f"ERROR@{str(e)}".encode(FORMAT))
@@ -134,17 +162,46 @@ def handle_client(conn, addr):
                             file_data = f.read(SIZE)
                             if not file_data:
                                 break
-
                             conn.send(file_data)
                         conn.send(b"END")  # End marker for file transfer
                     download_end_time = time.time()
+
+                    # Calculate performance metrics
                     download_time = download_end_time - download_start_time
                     file_size = os.path.getsize(filepath)  # Get file size
                     download_rate = file_size / (1024 * 1024) / download_time  # Rate in MB/s
+
                     # Log performance metrics
                     log_operation("DOWNLOAD_SUCCESS", f"File '{filename}' sent to {addr}")
                     log_operation("DOWNLOAD_TIME", f"Download time: {download_time:.2f} seconds")
                     log_operation("DOWNLOAD_RATE", f"Download rate: {download_rate:.2f} MB/s")
+
+                    # Append metrics to an Excel file
+                    excel_file = "download_rates.xlsx"
+                    data = {
+                        "Timestamp": [time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(download_end_time))],
+                        "File Name": [filename],
+                        "File Size (MB)": [file_size / (1024 * 1024)],  # Convert bytes to MB
+                        "Download Time (s)": [download_time],
+                        "Download Rate (MB/s)": [download_rate],
+                    }
+
+                    # Create a DataFrame
+                    df = pandas.DataFrame(data)
+
+                    # Append to Excel (create file if it doesn't exist)
+                    try:
+                        # If the file exists, read it and append the new data
+                        existing_data = pandas.read_excel(excel_file, engine='openpyxl')
+                        updated_data = pandas.concat([existing_data, df], ignore_index=True)
+                    except FileNotFoundError:
+                        # If the file doesn't exist, create a new one
+                        updated_data = df
+
+                    # Save to Excel
+                    updated_data.to_excel(excel_file, index=False, engine='openpyxl')
+                    print(f"Download saved successfully to {excel_file}")
+
                 except Exception as e:
                     conn.send(f"ERROR@{str(e)}".encode(FORMAT))
                     log_operation("DOWNLOAD_ERROR", f"Error during download of '{filename}': {str(e)}")
