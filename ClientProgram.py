@@ -74,6 +74,7 @@ def main():
                 print(response.split('@')[1])
                 continue
 
+            upload_start_time = time.time()
             # Proceed with uploading the file
             try:
                 with open(filepath, 'rb') as file:
@@ -84,6 +85,9 @@ def main():
                     client_socket.send(b"END")  # Send END marker
 
                 print(client_socket.recv(SIZE).decode(FORMAT))  # Success message
+                upload_end_time = time.time()
+                upload_time = upload_end_time - upload_start_time
+                print(f"Uploaded '{filename}' in {upload_time:.2f} seconds")
 
             except Exception as e:
                 print(f"Error uploading file: {e}")
