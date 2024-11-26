@@ -13,7 +13,7 @@ HOST = 'localhost'
 PORT = 4450
 SIZE = 1024
 FORMAT = 'utf-8'
-DISCONNECT_MESSAGE = "LOGOUT"
+DISCONNECT_MESSAGE = 'LOGOUT'
 AUTH_CREDENTIALS = {"Logan": "Baller", "Billy": "Balling", "Robert": "Balla"}
 
 # Directory for file operations
@@ -89,7 +89,7 @@ def handle_client(conn, addr):
                 upload_start_time = time.time()
 
                 try:
-                    with open(filepath, 'wb') as f:
+                    with open(filepath, "wb") as f:
                         while True:
                             file_data = conn.recv(SIZE)
                             if file_data.endswith(b"END"):  # Check for END marker
@@ -98,23 +98,23 @@ def handle_client(conn, addr):
                             f.write(file_data)
 
                     upload_end_time = time.time()
-                    upload_time = upload_end_time - upload_start_time + 0.000001 # avoid division by zero
+                    upload_time = upload_end_time - upload_start_time + 0.000001  # avoid division by zero
 
                     # Calculate upload rate (MB/s)
                     file_size = os.path.getsize(filepath)
                     upload_rate = file_size / (1024 * 1024) / upload_time  # MB/s
 
-                    conn.send(f"SUCCESS@File '{filename}' uploaded successfully.".encode(FORMAT))
+                    conn.send(f"SUCCESS@File {filename} uploaded successfully.".encode(FORMAT))
 
                     # Log the performance metrics
-                    log_operation(f"File uploaded: {filename} at {upload_rate:.2f} MB/s", addr)
+                    log_operation(f"File uploaded: '{filename}' at {upload_rate:.2f} MB/s", addr)
                     log_operation("UPLOAD_TIME", f"Upload time: {upload_time:.2f} seconds")
                     log_operation("UPLOAD_RATE", f"Upload rate: {upload_rate:.2f} MB/s")
 
                     # Append metrics to an Excel file
                     excel_file = "upload_rates.xlsx"
                     data = {
-                        "Timestamp": [time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(upload_end_time))],
+                        "Timestamp": [time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(upload_end_time))],
                         "File Name": [filename],
                         "File Size (MB)": [file_size / (1024 * 1024)],  # Convert bytes to MB
                         "Upload Time (s)": [upload_time],
@@ -157,7 +157,7 @@ def handle_client(conn, addr):
                 try:
                     conn.send("SUCCESS@File found. Starting transfer.".encode(FORMAT))
                     download_start_time = time.time()  # Start timer for performance metrics
-                    with open(filepath, 'rb') as f:
+                    with open(filepath, "rb") as f:
                         while True:
                             file_data = f.read(SIZE)
                             if not file_data:
@@ -167,7 +167,7 @@ def handle_client(conn, addr):
                     download_end_time = time.time()
 
                     # Calculate performance metrics
-                    download_time = download_end_time - download_start_time
+                    download_time = download_end_time - download_start_time + 0.000001  # avoid division by zero
                     file_size = os.path.getsize(filepath)  # Get file size
                     download_rate = file_size / (1024 * 1024) / download_time  # Rate in MB/s
 
@@ -179,7 +179,7 @@ def handle_client(conn, addr):
                     # Append metrics to an Excel file
                     excel_file = "download_rates.xlsx"
                     data = {
-                        "Timestamp": [time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(download_end_time))],
+                        "Timestamp": [time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(download_end_time))],
                         "File Name": [filename],
                         "File Size (MB)": [file_size / (1024 * 1024)],  # Convert bytes to MB
                         "Download Time (s)": [download_time],
@@ -192,14 +192,14 @@ def handle_client(conn, addr):
                     # Append to Excel (create file if it doesn't exist)
                     try:
                         # If the file exists, read it and append the new data
-                        existing_data = pandas.read_excel(excel_file, engine='openpyxl')
+                        existing_data = pandas.read_excel(excel_file, engine="openpyxl")
                         updated_data = pandas.concat([existing_data, df], ignore_index=True)
                     except FileNotFoundError:
                         # If the file doesn't exist, create a new one
                         updated_data = df
 
                     # Save to Excel
-                    updated_data.to_excel(excel_file, index=False, engine='openpyxl')
+                    updated_data.to_excel(excel_file, index=False, engine="openpyxl")
                     print(f"Download saved successfully to {excel_file}")
 
                 except Exception as e:
@@ -230,7 +230,7 @@ def handle_client(conn, addr):
                 parts = command.split(maxsplit=2)
                 action = parts[1].strip().lower()  # Action can be 'create' or 'delete'
                 dir_path = parts[2].strip() if len(parts) > 2 else ''
-                if action == 'create':
+                if action == "create":
                     full_path = os.path.join(current_dir, dir_path)
                     try:
                         os.makedirs(full_path, exist_ok=True)
@@ -259,7 +259,7 @@ def handle_client(conn, addr):
                         # Compute the new directory by going to the parent of the current directory
                         new_dir = os.path.abspath(os.path.join(current_dir, os.pardir))
                         # Ensure the new directory is within the allowed base directory
-                        if os.path.commonpath([new_dir, BASE_DIR]) != BASE_DIR:
+                        if os.path.commonpath([os.path.abspath(new_dir), os.path.abspath(BASE_DIR)]) != os.path.abspath(BASE_DIR):
                             conn.send("ERROR@Cannot move outside the base directory.".encode(FORMAT))
                             log_operation("CD_FAIL", f"Client {addr} attempted to move outside the base directory.")
                         else:
@@ -270,8 +270,7 @@ def handle_client(conn, addr):
                         # Handle navigating into a specific subdirectory
                         new_dir = os.path.join(current_dir, dir_name)
                         if os.path.isdir(new_dir):
-                            current_dir = os.path.abspath(
-                                new_dir)  # Update current directory to the resolved absolute path
+                            current_dir = os.path.abspath(new_dir)  # Update current directory to the resolved absolute path
                             conn.send(f"CD_OK@Changed directory to {current_dir}".encode(FORMAT))
                             log_operation("CD", f"Client {addr} changed directory to {current_dir}.")
                         else:
