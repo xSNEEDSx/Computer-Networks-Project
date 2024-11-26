@@ -9,7 +9,7 @@ HOST = 'localhost'
 PORT = 4450
 SIZE = 1024
 FORMAT = 'utf-8'
-DISCONNECT_MESSAGE = "LOGOUT"
+DISCONNECT_MESSAGE = 'LOGOUT'
 
 
 def main():
@@ -30,10 +30,10 @@ def main():
         client_socket.send(hashed_password.encode(FORMAT))
         response = client_socket.recv(SIZE).decode(FORMAT)
         if response.startswith("AUTH_OK"):
-            print(response.split('@')[1])
+            print(response.split("@")[1])
             authenticated = True
         else:
-            print(response.split('@')[1])
+            print(response.split("@")[1])
 
     # Command loop
     while True:
@@ -59,25 +59,26 @@ def main():
             client_socket.send(f"UPLOAD {filename}".encode(FORMAT))
             response = client_socket.recv(SIZE).decode(FORMAT)
             if response.startswith("EXISTS@"):
-                overwrite_prompt = response.split('@')[1]
+                overwrite_prompt = response.split("@")[1]
                 overwrite = input(overwrite_prompt + " ").strip().upper()  # Avoid redundant '(YES/NO)'
                 if overwrite != "YES":
                     client_socket.send("NO".encode(FORMAT))
                     cancel_response = client_socket.recv(SIZE).decode(FORMAT)  # Process server's cancel response
                     if cancel_response.startswith("CANCEL@"):
-                        print(cancel_response.split('@')[1])
+                        print(cancel_response.split("@")[1])
                     continue  # Return to the main loop
 
                 client_socket.send("YES".encode(FORMAT))
 
             elif response.startswith("ERROR@"):
-                print(response.split('@')[1])
+                print(response.split("@")[1])
                 continue
 
             upload_start_time = time.time()
             # Proceed with uploading the file
             try:
-                with open(filepath, 'rb') as file:
+                with open(filepath, "rb") as file:
+                    print(f"Uploading '{filename}'...")
                     data = file.read(SIZE)
                     while data:
                         client_socket.send(data)
@@ -108,7 +109,7 @@ def main():
 
                 download_start_time = time.time()  # Start time for performance metrics
                 # Open file for binary writing
-                with open(filename, 'wb') as f:
+                with open(filename, "wb") as f:
                     print(f"Downloading '{filename}'...")
                     while True:
                         file_data = client_socket.recv(SIZE)
@@ -140,7 +141,7 @@ def main():
         elif command == "DIR":
             client_socket.send(command.encode(FORMAT))
             response = client_socket.recv(SIZE).decode(FORMAT)
-            print(response.split('@')[1])
+            print(response.split("@")[1])
 
         elif command.startswith("SUBFOLDER"):
             action = input("Enter action (create/delete): ").strip()
@@ -162,10 +163,10 @@ def main():
             client_socket.send(f"CD {dir_name}".encode(FORMAT))
             response = client_socket.recv(SIZE).decode(FORMAT)
             if response.startswith("CD_OK"):
-                current_dir = response.split('@')[1].replace("Changed directory to ", "")
+                current_dir = response.split("@")[1].replace("Changed directory to ", "")
                 print(f"Changed directory to {current_dir}")
             else:
-                print(response.split('@')[1])
+                print(response.split("@")[1])
 
         else:
             print("Invalid command.")
