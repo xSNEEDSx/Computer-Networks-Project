@@ -7,6 +7,10 @@ import hashlib
 import time
 import pandas
 import openpyxl
+import numpy as np, pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import random
 from AnalysisProgram import log_operation  # Importing the log function
 
 HOST = 'localhost'
@@ -279,6 +283,53 @@ def handle_client(conn, addr):
                 except Exception as e:
                     conn.send(f"ERROR@Unexpected error: {str(e)}".encode(FORMAT))
                     log_operation("CD_ERROR", f"Unexpected error occurred: {str(e)}")
+
+            elif command.startswith("GRAPH"):
+                excel_file = "upload_rates.xlsx"
+                
+                # Check if the Excel file exists
+                if not os.path.exists(excel_file):
+                    conn.send("ERROR@No data available for generating the graph.".encode(FORMAT))
+                    continue
+
+                try:
+                    # Read the Excel file
+                    df = pandas.read_excel(excel_file, engine='openpyxl')
+                    print(f"Data loaded from Excel: {df.head()}")
+
+                    # Determine the maximum values for dynamic figsize calculation
+                    max_file_size = df['File Size (MB)'].max()
+                    max_upload_time = df['Upload Time (s)'].max()
+
+                    # Dynamic figsize calculation
+                    fig_width = min(max(10, max_upload_time / 10), 10)  # Scale width with max file size, but limit to 15 inches
+                    fig_height = min(max(6, max_file_size / 10), 15)  # Scale height with max upload time, but limit to 10 inches
+
+                    # Plot the graph
+                    plt.figure(figsize=(fig_width, fig_height))
+
+                    # Iterate through each row in the dataframe and plot individually
+                    for index, row in df.iterrows():
+                        random_color = random.choice(list(mcolors.CSS4_COLORS.values()))
+                        file_size = row["File Size (MB)"]
+                        upload_time = row["Upload Time (s)"]
+                        file_name = row["File Name"]
+                        
+                        # Create a unique label for each file (e.g., using the file's index or another field)
+                        label = f"{file_name} (Size: {file_size} MB)"
+                        
+                        # Plot the individual data point (file's data)
+                        plt.plot([0, upload_time], [0, file_size], marker='o', color=random_color, label=label)
+
+                    plt.xlabel("Upload Time (s)")
+                    plt.ylabel("File Size (MB)")
+                    plt.title("Upload Rate (MB/s)")
+                    plt.legend()
+                    plt.show()
+
+                except Exception as e:
+                    conn.send(f"ERROR@{str(e)}".encode(FORMAT))
+                    log_operation("GRAPH_ERROR", f"Error generating graph: {str(e)}")
 
     except Exception as e:
         log_operation("ERROR", f"Error handling client {addr}: {e}")
