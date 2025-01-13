@@ -168,13 +168,12 @@ def main():
                 print(response.split("@")[1])
 
         elif command.startswith("GRAPH"):
-            data_sent = client_socket.send("GRAPH".encode(FORMAT))
-            continue
-            response = client_socket.recv(SIZE).decode(FORMAT)
-
-            if response.startswith("ERROR@"):
-                print(response.split("@")[1])
+            action = input("Enter action (upload/download) (or type BACK to cancel): ").strip()
+            if action.upper() == "BACK":
                 continue
+            client_socket.send(f"GRAPH {action}".encode(FORMAT))
+            continue
+
         else:
             print("Invalid command.")
 
