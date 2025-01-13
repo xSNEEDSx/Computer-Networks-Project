@@ -29,7 +29,7 @@ def main():
         client_socket.send(username.encode(FORMAT))
         client_socket.send(hashed_password.encode(FORMAT))
         response = client_socket.recv(SIZE).decode(FORMAT)
-        if response.startswith("AUTH_OK"):
+        if response.startswith("AUTH_OK@"):
             print(response.split("@")[1])
             authenticated = True
         else:
@@ -37,7 +37,7 @@ def main():
 
     # Command loop
     while True:
-        command = input(f"Current directory: {current_dir}\nEnter command (DIR, UPLOAD, DOWNLOAD, DELETE, LOGOUT, SUBFOLDER, CD): ").strip()
+        command = input(f"Current directory: {current_dir}\nEnter command (DIR, UPLOAD, DOWNLOAD, DELETE, SUBFOLDER, CD, GRAPH, LOGOUT): ").strip()
 
         if command == "LOGOUT":
             client_socket.send(DISCONNECT_MESSAGE.encode(FORMAT))
@@ -155,7 +155,6 @@ def main():
             dir_name = input("Enter directory name to change to (or type BACK to cancel): ").strip()
             if dir_name.upper() == "BACK":
                 continue
-
             if not dir_name:
                 print("Directory name cannot be empty.")
                 continue
@@ -168,6 +167,14 @@ def main():
             else:
                 print(response.split("@")[1])
 
+        elif command.startswith("GRAPH"):
+            data_sent = client_socket.send("GRAPH".encode(FORMAT))
+            continue
+            response = client_socket.recv(SIZE).decode(FORMAT)
+
+            if response.startswith("ERROR@"):
+                print(response.split("@")[1])
+                continue
         else:
             print("Invalid command.")
 
